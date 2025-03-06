@@ -45,17 +45,6 @@ export interface DataGenerationParams {
   volatility: number;
 }
 
-export interface ThreeDDataParams {
-  interestRate: number;
-  optionType: "call" | "put";
-  spotPrice: number;
-  strikePrice: number;
-  timeToExpiry: number;
-  volatility: number;
-  xParam: keyof ThreeDRanges;
-  yParam: keyof ThreeDRanges;
-}
-
 export interface ThreeDRange {
   min: number;
   max: number;
@@ -69,6 +58,17 @@ export interface ThreeDRanges {
   time: ThreeDRange;
   volatility: ThreeDRange;
   interest: ThreeDRange;
+}
+
+export interface ThreeDDataParams {
+  interestRate: number;
+  optionType: "call" | "put";
+  spotPrice: number;
+  strikePrice: number;
+  timeToExpiry: number;
+  volatility: number;
+  xParam: keyof ThreeDRanges;
+  yParam: keyof ThreeDRanges;
 }
 
 export interface PortfolioParams {
