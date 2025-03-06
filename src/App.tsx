@@ -185,9 +185,6 @@ const initWasm = async (): Promise<WasmModule> => {
         memory: new WebAssembly.Memory({ initial: 256, maximum: 256 }), // Memory for calloc
         __memory_base: 0,
         __table_base: 0,
-        emscripten_notify_memory_growth: function (size: number) {
-          console.log(`Memory grown to: ${size} bytes`); // Debug log, can be empty
-        },
       },
     };
 
@@ -687,7 +684,7 @@ const OptionGreeksVisualization: React.FC = () => {
   };
 
   const processMessage = async function (e: CalculatorMessage) {
-    const startTime = performance.now();
+    // const startTime = performance.now();
 
     const { task, params } = e;
 
@@ -802,7 +799,6 @@ const OptionGreeksVisualization: React.FC = () => {
         interestRate,
         volatility,
       } = params as ThreeDDataParams;
-      console.log(params);
       const data = [];
 
       // Define ranges
@@ -882,7 +878,6 @@ const OptionGreeksVisualization: React.FC = () => {
       processCalculatorResult({ task: "3dDataResult", data });
     } else if (task === "calculatePortfolio") {
       const { options, xAxis, range } = params as PortfolioParams;
-      console.log(params);
       const results = [];
 
       const min = range.min;
@@ -943,8 +938,8 @@ const OptionGreeksVisualization: React.FC = () => {
       processCalculatorResult({ task: "portfolioResult", results });
     }
 
-    const endTime = performance.now();
-    console.log(`${task} took ${endTime - startTime}ms`);
+    // const endTime = performance.now();
+    // console.log(`${task} took ${endTime - startTime}ms`);
   };
 
   // Input handler
