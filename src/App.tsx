@@ -1161,7 +1161,7 @@ const OptionGreeksVisualization: React.FC = () => {
       <div className="w-full">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-bold text-center">
-            Advanced Option Greeks Visualization
+            Option Greeks Visualizer
           </h2>
           {isCalculating && (
             <div className="text-sm bg-blue-100 px-2 py-1 rounded">
