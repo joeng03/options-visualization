@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useRef } from "react";
+// OptionGreeksVisualization.tsx
+import React, { useState, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -9,481 +10,27 @@ import {
   Legend,
   ResponsiveContainer,
 } from "recharts";
-import Plotly from "plotly.js-dist-min";
+import Surface3D from "./components/Surface3D";
+import OptionContract from "./components/OptionContract";
+import { initWasm } from "./utils/wasm";
+import { jsCalculateGreeks } from "./utils/calculations";
+import {
+  OptionParams,
+  CalculatorMessage,
+  ChartDataPoint,
+  SurfaceDataPoint,
+  PortfolioDataPoint,
+  PortfolioOption,
+  Greeks,
+  WasmModule,
+  CalculatorResponse,
+  ThreeDDataParams,
+  PortfolioParams,
+  DataGenerationParams,
+  GreeksParams,
+} from "./utils/types";
 import "./App.css";
 
-// Define types for option parameters and Greeks
-interface OptionParams {
-  type: "call" | "put";
-  S: number; // Spot price
-  K: number; // Strike price
-  T: number; // Time to expiry (years)
-  r: number; // Risk-free interest rate
-  sigma: number; // Volatility
-}
-
-interface CalculatorMessage {
-  task:
-    | "calculateGreeks"
-    | "calculatePortfolio"
-    | "generateData"
-    | "generate3DData";
-  params: CalculatorParams;
-}
-
-type CalculatorParams =
-  | GreeksParams
-  | DataGenerationParams
-  | ThreeDDataParams
-  | PortfolioParams;
-
-interface GreeksParams {
-  type: "call" | "put";
-  S: number;
-  K: number;
-  T: number;
-  r: number;
-  sigma: number;
-  position: string;
-  quantity: number;
-}
-
-interface DataGenerationParams {
-  greek: keyof Greeks;
-  interestRate: number;
-  optionType: "call" | "put";
-  parameter: string;
-  spotPrice: number;
-  strikePrice: number;
-  timeToExpiry: number;
-  volatility: number;
-}
-
-interface ThreeDDataParams {
-  interestRate: number;
-  optionType: "call" | "put";
-  spotPrice: number;
-  strikePrice: number;
-  timeToExpiry: number;
-  volatility: number;
-  xParam: keyof ThreeDRanges;
-  yParam: keyof ThreeDRanges;
-}
-
-interface ThreeDRange {
-  min: number;
-  max: number;
-  steps: number;
-  current: number;
-}
-
-interface ThreeDRanges {
-  price: ThreeDRange;
-  strike: ThreeDRange;
-  time: ThreeDRange;
-  volatility: ThreeDRange;
-  interest: ThreeDRange;
-}
-
-interface PortfolioParams {
-  options: Array<GreeksParams>;
-  xAxis: string;
-  range: {
-    min: number;
-    max: number;
-  };
-}
-
-interface CalculatorResponse {
-  task: "greeksResult" | "dataResult" | "3dDataResult" | "portfolioResult";
-  result?: Greeks;
-  data?: any[]; // Refined below
-  results?: any[]; // Refined below
-}
-
-// Chart data types
-interface ChartDataPoint {
-  parameter: number;
-  value: number;
-}
-
-interface SurfaceDataPoint {
-  x: number;
-  y: number;
-  z: number;
-}
-
-interface PortfolioDataPoint {
-  parameter: number;
-  delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
-  rho: number;
-  value: number;
-}
-
-// Portfolio option type
-interface PortfolioOption extends OptionParams {
-  position: "long" | "short";
-  quantity: number;
-}
-
-// Surface3D (unchanged)
-interface Surface3DProps {
-  data: SurfaceDataPoint[];
-  xLabel: string;
-  yLabel: string;
-  zLabel: string;
-}
-
-// Define types for Greeks
-interface Greeks {
-  delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
-  rho: number;
-  price: number;
-}
-
-interface WasmExports extends WebAssembly.Exports {
-  memory: WebAssembly.Memory;
-  calculateGreeks: (
-    isCall: number,
-    S: number,
-    K: number,
-    T: number,
-    r: number,
-    sigma: number
-  ) => number;
-}
-
-interface WasmModule {
-  calculateGreeks: (
-    type: "call" | "put",
-    S: number,
-    K: number,
-    T: number,
-    r: number,
-    sigma: number
-  ) => Greeks;
-}
-
-const initWasm = async (): Promise<WasmModule> => {
-  try {
-    const response = await fetch("wasm/options_calc.wasm");
-    if (!response.ok) {
-      throw new Error(
-        `Failed to fetch options-calc.wasm: ${response.statusText}`
-      );
-    }
-    const buffer = await response.arrayBuffer();
-
-    const imports = {
-      env: {
-        memory: new WebAssembly.Memory({ initial: 256, maximum: 256 }), // Memory for calloc
-        __memory_base: 0,
-        __table_base: 0,
-      },
-    };
-
-    const module = await WebAssembly.instantiate(buffer, imports);
-    const exports = module.instance.exports as WasmExports;
-
-    const calculateGreeksRaw = exports.calculateGreeks as (
-      isCall: number,
-      S: number,
-      K: number,
-      T: number,
-      r: number,
-      sigma: number
-    ) => number;
-
-    return {
-      calculateGreeks: (
-        type: "call" | "put",
-        S: number,
-        K: number,
-        T: number,
-        r: number,
-        sigma: number
-      ): Greeks => {
-        const isCall = type === "call" ? 1 : 0;
-        const resultsPtr = calculateGreeksRaw(isCall, S, K, T, r, sigma);
-        const results = new Float64Array(exports.memory.buffer, resultsPtr, 6);
-        return {
-          price: results[5], // PRICE
-          delta: results[0], // DELTA
-          gamma: results[1], // GAMMA
-          theta: results[2], // THETA
-          vega: results[3], // VEGA
-          rho: results[4], // RHO
-        };
-      },
-    };
-  } catch (error) {
-    console.error("WebAssembly module failed to load:", error);
-    return {
-      calculateGreeks: () => ({
-        delta: 0,
-        gamma: 0,
-        theta: 0,
-        vega: 0,
-        rho: 0,
-        price: 0,
-      }), // Fallback
-    };
-  }
-};
-
-const Surface3D: React.FC<Surface3DProps> = ({
-  data,
-  xLabel,
-  yLabel,
-  zLabel,
-}) => {
-  const plotRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!plotRef.current || data.length === 0) return;
-
-    const xValues = Array.from(new Set(data.map((point) => point.x))).sort(
-      (a, b) => a - b
-    );
-    const yValues = Array.from(new Set(data.map((point) => point.y))).sort(
-      (a, b) => a - b
-    );
-    const zValues: number[][] = [];
-
-    yValues.forEach((y) => {
-      const row: number[] = [];
-      xValues.forEach((x) => {
-        const point = data.find((p) => p.x === x && p.y === y);
-        row.push(point ? point.z : 0);
-      });
-      zValues.push(row);
-    });
-
-    const plotData: Partial<Plotly.Data>[] = [
-      {
-        type: "surface",
-        x: xValues,
-        y: yValues,
-        z: zValues,
-        colorscale: "Viridis",
-      },
-    ];
-
-    const layout: Partial<Plotly.Layout> = {
-      scene: {
-        xaxis: { title: { text: xLabel } },
-        yaxis: { title: { text: yLabel } },
-        zaxis: { title: { text: zLabel } },
-      },
-      margin: { l: 0, r: 0, t: 40, b: 0 },
-      height: 400,
-    };
-
-    Plotly.newPlot(plotRef.current, plotData, layout, { responsive: true });
-
-    return () => {
-      if (plotRef.current) Plotly.purge(plotRef.current);
-    };
-  }, [data, xLabel, yLabel, zLabel]);
-
-  return (
-    <div className="h-64 w-full">
-      <div ref={plotRef} className="w-full h-full" />
-    </div>
-  );
-};
-
-// OptionContract (unchanged)
-interface OptionContractProps {
-  option: PortfolioOption;
-  index: number;
-  updateOption: (
-    index: number,
-    field: keyof PortfolioOption,
-    value: any
-  ) => void;
-  removeOption: (index: number) => void;
-}
-
-const OptionContract: React.FC<OptionContractProps> = ({
-  option,
-  index,
-  updateOption,
-  removeOption,
-}) => {
-  return (
-    <div className="border p-3 rounded-lg mb-2 bg-gray-50">
-      <div className="flex justify-between mb-2">
-        <h4 className="font-medium">Option #{index + 1}</h4>
-        <button
-          onClick={() => removeOption(index)}
-          className="text-red-500 hover:text-red-700"
-        >
-          Remove
-        </button>
-      </div>
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <div>
-          <label className="block text-sm">Type</label>
-          <select
-            value={option.type}
-            onChange={(e) =>
-              updateOption(index, "type", e.target.value as "call" | "put")
-            }
-            className="border rounded p-1 w-full"
-          >
-            <option value="call">Call</option>
-            <option value="put">Put</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm">Position</label>
-          <select
-            value={option.position}
-            onChange={(e) =>
-              updateOption(
-                index,
-                "position",
-                e.target.value as "long" | "short"
-              )
-            }
-            className="border rounded p-1 w-full"
-          >
-            <option value="long">Long</option>
-            <option value="short">Short</option>
-          </select>
-        </div>
-        <div>
-          <label className="block text-sm">Quantity</label>
-          <input
-            type="number"
-            value={option.quantity}
-            onChange={(e) =>
-              updateOption(index, "quantity", parseInt(e.target.value) || 1)
-            }
-            min="1"
-            className="border rounded p-1 w-full"
-          />
-        </div>
-        <div>
-          <label className="block text-sm">Strike</label>
-          <input
-            type="number"
-            value={option.K}
-            onChange={(e) =>
-              updateOption(index, "K", parseFloat(e.target.value))
-            }
-            className="border rounded p-1 w-full"
-            step="1"
-          />
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Black-Scholes helper functions
-const d1 = (S: number, K: number, T: number, r: number, sigma: number) =>
-  (Math.log(S / K) + (r + (sigma * sigma) / 2) * T) / (sigma * Math.sqrt(T));
-
-const d2 = (S: number, K: number, T: number, r: number, sigma: number) =>
-  d1(S, K, T, r, sigma) - sigma * Math.sqrt(T);
-
-const cdf = (x: number) => {
-  const a1 = 0.254829592;
-  const a2 = -0.284496736;
-  const a3 = 1.421413741;
-  const a4 = -1.453152027;
-  const a5 = 1.061405429;
-  const p = 0.3275911;
-
-  const sign = x < 0 ? -1 : 1;
-  const z = Math.abs(x) / Math.sqrt(2);
-
-  const t = 1.0 / (1.0 + p * z);
-  const erf =
-    1.0 - ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * Math.exp(-z * z);
-
-  return 0.5 * (1.0 + sign * erf);
-};
-
-const normalPDF = (x: number) =>
-  Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-
-// Calculate option greeks
-const jsCalculateGreeks = (
-  type: string,
-  S: number,
-  K: number,
-  T: number,
-  r: number,
-  sigma: number
-) => {
-  if (T <= 0) {
-    // Handle expiration
-    const isInTheMoney =
-      (type === "call" && S > K) || (type === "put" && S < K);
-    return {
-      delta: type === "call" ? (S > K ? 1 : 0) : S < K ? -1 : 0,
-      gamma: 0,
-      theta: 0,
-      vega: 0,
-      rho: 0,
-      price: isInTheMoney ? Math.abs(S - K) : 0,
-    };
-  }
-
-  const d1Value = d1(S, K, T, r, sigma);
-  const d2Value = d2(S, K, T, r, sigma);
-  ("");
-
-  const N_d1 = cdf(d1Value);
-  const N_d2 = cdf(d2Value);
-  const N_neg_d1 = cdf(-d1Value);
-  const N_neg_d2 = cdf(-d2Value);
-
-  // Option price
-  const price =
-    type === "call"
-      ? S * N_d1 - K * Math.exp(-r * T) * N_d2
-      : K * Math.exp(-r * T) * N_neg_d2 - S * N_neg_d1;
-
-  // Greeks calculations
-  let delta, gamma, theta, vega, rho;
-
-  if (type === "call") {
-    delta = N_d1;
-    rho = (K * T * Math.exp(-r * T) * N_d2) / 100;
-    theta =
-      (-S * sigma * normalPDF(d1Value)) / (2 * Math.sqrt(T)) -
-      r * K * Math.exp(-r * T) * N_d2;
-  } else {
-    delta = N_d1 - 1;
-    rho = (-K * T * Math.exp(-r * T) * N_neg_d2) / 100;
-    theta =
-      (-S * sigma * normalPDF(d1Value)) / (2 * Math.sqrt(T)) +
-      r * K * Math.exp(-r * T) * N_neg_d2;
-  }
-
-  // Common for both
-  gamma = normalPDF(d1Value) / (S * sigma * Math.sqrt(T));
-  vega = (S * Math.sqrt(T) * normalPDF(d1Value)) / 100;
-
-  // Convert theta to daily
-  theta = theta / 365;
-
-  return { delta, gamma, theta, vega, rho, price };
-};
-
-// Main Component with Fixed Worker Messaging
-
-// Main Component with WASM integration using react-wasm
 const OptionGreeksVisualization: React.FC = () => {
   const [optionType, setOptionType] = useState<"call" | "put">("call");
   const [greek, setGreek] = useState<keyof Greeks | "price">("delta");
@@ -535,10 +82,8 @@ const OptionGreeksVisualization: React.FC = () => {
   const [currentValues, setCurrentValues] = useState<Partial<Greeks>>({});
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState<boolean>(true);
-
-  // Update the wasmModule when the WebAssembly instance is loaded
-
   const [wasmModule, setWasmModule] = useState<WasmModule | null>(null);
+
   useEffect(() => {
     const loadWasm = async () => {
       const module = await initWasm();
@@ -547,9 +92,7 @@ const OptionGreeksVisualization: React.FC = () => {
     loadWasm();
   }, []);
 
-  // Calculate current option values
   useEffect(() => {
-    // Use wasmModule for calculations if available, otherwise use worker
     const greeks = calculateGreeks(
       optionType,
       spotPrice,
@@ -569,7 +112,6 @@ const OptionGreeksVisualization: React.FC = () => {
     volatility,
   ]);
 
-  // Save to local storage
   useEffect(() => {
     localStorage.setItem("options", JSON.stringify(options));
     localStorage.setItem("portfolioData", JSON.stringify(portfolioData));
@@ -684,8 +226,6 @@ const OptionGreeksVisualization: React.FC = () => {
   };
 
   const processMessage = async function (e: CalculatorMessage) {
-    // const startTime = performance.now();
-
     const { task, params } = e;
 
     if (task === "calculateGreeks") {
@@ -801,7 +341,6 @@ const OptionGreeksVisualization: React.FC = () => {
       } = params as ThreeDDataParams;
       const data = [];
 
-      // Define ranges
       const xRanges = {
         price: {
           min: spotPrice * 0.7,
@@ -822,7 +361,6 @@ const OptionGreeksVisualization: React.FC = () => {
 
       const yRanges = { ...xRanges };
 
-      // Generate grid of values
       const xRange = xRanges[xParam];
       const yRange = yRanges[yParam];
 
@@ -835,8 +373,7 @@ const OptionGreeksVisualization: React.FC = () => {
         for (let j = 0; j <= yRange.steps; j++) {
           const yValue = yRange.min + j * yStep;
 
-          // Set parameters
-          const params = {
+          const params: OptionParams = {
             type: optionType,
             S: spotPrice,
             K: strikePrice,
@@ -845,7 +382,6 @@ const OptionGreeksVisualization: React.FC = () => {
             sigma: volatility,
           };
 
-          // Override with x and y parameters
           if (xParam === "price") params.S = xValue;
           if (xParam === "strike") params.K = xValue;
           if (xParam === "time") params.T = xValue;
@@ -895,7 +431,6 @@ const OptionGreeksVisualization: React.FC = () => {
         let totalValue = 0;
 
         options.forEach((option) => {
-          // Apply the varying parameter
           const params = { ...option };
 
           if (xAxis === "price") params.S = xValue;
@@ -912,7 +447,6 @@ const OptionGreeksVisualization: React.FC = () => {
             params.sigma
           );
 
-          // Apply quantity and direction
           const sign = params.position === "long" ? 1 : -1;
           const qty = params.quantity || 1;
 
@@ -937,12 +471,8 @@ const OptionGreeksVisualization: React.FC = () => {
 
       processCalculatorResult({ task: "portfolioResult", results });
     }
-
-    // const endTime = performance.now();
-    // console.log(`${task} took ${endTime - startTime}ms`);
   };
 
-  // Input handler
   const handleInputChange = (
     setter: React.Dispatch<React.SetStateAction<number>>,
     value: string,
@@ -955,7 +485,6 @@ const OptionGreeksVisualization: React.FC = () => {
     }
   };
 
-  // Portfolio functions
   const addOption = () => {
     setOptions([
       ...options,
@@ -1488,7 +1017,7 @@ const OptionGreeksVisualization: React.FC = () => {
             >
               Take Screenshot
             </button>
-          )}{" "}
+          )}
         </div>
       </div>
     </div>
