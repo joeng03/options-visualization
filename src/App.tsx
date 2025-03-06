@@ -22,23 +22,76 @@ interface OptionParams {
   sigma: number; // Volatility
 }
 
-interface Greeks {
-  delta: number;
-  gamma: number;
-  theta: number;
-  vega: number;
-  rho: number;
-  price: number;
-}
-
-// Types for messages
 interface CalculatorMessage {
   task:
     | "calculateGreeks"
+    | "calculatePortfolio"
     | "generateData"
-    | "generate3DData"
-    | "calculatePortfolio";
-  params: any; // We'll refine this per task
+    | "generate3DData";
+  params: CalculatorParams;
+}
+
+type CalculatorParams =
+  | GreeksParams
+  | DataGenerationParams
+  | ThreeDDataParams
+  | PortfolioParams;
+
+interface GreeksParams {
+  type: "call" | "put";
+  S: number;
+  K: number;
+  T: number;
+  r: number;
+  sigma: number;
+  position: string;
+  quantity: number;
+}
+
+interface DataGenerationParams {
+  greek: keyof Greeks;
+  interestRate: number;
+  optionType: "call" | "put";
+  parameter: string;
+  spotPrice: number;
+  strikePrice: number;
+  timeToExpiry: number;
+  volatility: number;
+}
+
+interface ThreeDDataParams {
+  interestRate: number;
+  optionType: "call" | "put";
+  spotPrice: number;
+  strikePrice: number;
+  timeToExpiry: number;
+  volatility: number;
+  xParam: keyof ThreeDRanges;
+  yParam: keyof ThreeDRanges;
+}
+
+interface ThreeDRange {
+  min: number;
+  max: number;
+  steps: number;
+  current: number;
+}
+
+interface ThreeDRanges {
+  price: ThreeDRange;
+  strike: ThreeDRange;
+  time: ThreeDRange;
+  volatility: ThreeDRange;
+  interest: ThreeDRange;
+}
+
+interface PortfolioParams {
+  options: Array<GreeksParams>;
+  xAxis: string;
+  range: {
+    min: number;
+    max: number;
+  };
 }
 
 interface CalculatorResponse {
@@ -94,6 +147,18 @@ interface Greeks {
   price: number;
 }
 
+interface WasmExports extends WebAssembly.Exports {
+  memory: WebAssembly.Memory;
+  calculateGreeks: (
+    isCall: number,
+    S: number,
+    K: number,
+    T: number,
+    r: number,
+    sigma: number
+  ) => number;
+}
+
 interface WasmModule {
   calculateGreeks: (
     type: "call" | "put",
@@ -127,9 +192,9 @@ const initWasm = async (): Promise<WasmModule> => {
     };
 
     const module = await WebAssembly.instantiate(buffer, imports);
-    const instance = module.instance;
+    const exports = module.instance.exports as WasmExports;
 
-    const calculateGreeksRaw = instance.exports.calculateGreeks as (
+    const calculateGreeksRaw = exports.calculateGreeks as (
       isCall: number,
       S: number,
       K: number,
@@ -149,11 +214,7 @@ const initWasm = async (): Promise<WasmModule> => {
       ): Greeks => {
         const isCall = type === "call" ? 1 : 0;
         const resultsPtr = calculateGreeksRaw(isCall, S, K, T, r, sigma);
-        const results = new Float64Array(
-          instance.exports.memory.buffer,
-          resultsPtr,
-          6
-        );
+        const results = new Float64Array(exports.memory.buffer, resultsPtr, 6);
         return {
           price: results[5], // PRICE
           delta: results[0], // DELTA
@@ -331,12 +392,13 @@ const OptionContract: React.FC<OptionContractProps> = ({
 };
 
 // Black-Scholes helper functions
-const d1 = (S, K, T, r, sigma) =>
+const d1 = (S: number, K: number, T: number, r: number, sigma: number) =>
   (Math.log(S / K) + (r + (sigma * sigma) / 2) * T) / (sigma * Math.sqrt(T));
 
-const d2 = (S, K, T, r, sigma) => d1(S, K, T, r, sigma) - sigma * Math.sqrt(T);
+const d2 = (S: number, K: number, T: number, r: number, sigma: number) =>
+  d1(S, K, T, r, sigma) - sigma * Math.sqrt(T);
 
-const cdf = (x) => {
+const cdf = (x: number) => {
   const a1 = 0.254829592;
   const a2 = -0.284496736;
   const a3 = 1.421413741;
@@ -354,7 +416,8 @@ const cdf = (x) => {
   return 0.5 * (1.0 + sign * erf);
 };
 
-const normalPDF = (x) => Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+const normalPDF = (x: number) =>
+  Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
 
 // Calculate option greeks
 const jsCalculateGreeks = (
@@ -629,7 +692,7 @@ const OptionGreeksVisualization: React.FC = () => {
     const { task, params } = e;
 
     if (task === "calculateGreeks") {
-      const { type, S, K, T, r, sigma } = params;
+      const { type, S, K, T, r, sigma } = params as GreeksParams;
       const result = calculateGreeks(type, S, K, T, r, sigma);
       processCalculatorResult({ task: "greeksResult", result });
     } else if (task === "generateData") {
@@ -642,7 +705,7 @@ const OptionGreeksVisualization: React.FC = () => {
         timeToExpiry,
         interestRate,
         volatility,
-      } = params;
+      } = params as DataGenerationParams;
       const data = [];
 
       if (parameter === "price") {
@@ -738,7 +801,8 @@ const OptionGreeksVisualization: React.FC = () => {
         timeToExpiry,
         interestRate,
         volatility,
-      } = params;
+      } = params as ThreeDDataParams;
+      console.log(params);
       const data = [];
 
       // Define ranges
@@ -817,7 +881,8 @@ const OptionGreeksVisualization: React.FC = () => {
 
       processCalculatorResult({ task: "3dDataResult", data });
     } else if (task === "calculatePortfolio") {
-      const { options, xAxis, range } = params;
+      const { options, xAxis, range } = params as PortfolioParams;
+      console.log(params);
       const results = [];
 
       const min = range.min;
