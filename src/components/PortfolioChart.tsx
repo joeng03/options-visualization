@@ -39,6 +39,21 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
   addOption,
   getAxisLabel,
 }) => {
+  const [visibleLines, setVisibleLines] = React.useState({
+    delta: true,
+    gamma: true,
+    theta: true,
+    vega: true,
+    value: true,
+  });
+
+  const toggleLine = (line: keyof typeof visibleLines) => {
+    setVisibleLines((prev) => ({
+      ...prev,
+      [line]: !prev[line],
+    }));
+  };
+
   return (
     <div>
       <div className="mb-4">
@@ -68,6 +83,53 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
           </>
         )}
       </div>
+      <div className="mb-4 flex gap-4">
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={visibleLines.delta}
+            onChange={() => toggleLine("delta")}
+            className="mr-2"
+          />
+          Delta
+        </label>
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={visibleLines.gamma}
+            onChange={() => toggleLine("gamma")}
+            className="mr-2"
+          />
+          Gamma
+        </label>
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={visibleLines.theta}
+            onChange={() => toggleLine("theta")}
+            className="mr-2"
+          />
+          Theta
+        </label>
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={visibleLines.vega}
+            onChange={() => toggleLine("vega")}
+            className="mr-2"
+          />
+          Vega
+        </label>
+        <label className="flex items-center">
+          <input
+            type="checkbox"
+            checked={visibleLines.value}
+            onChange={() => toggleLine("value")}
+            className="mr-2"
+          />
+          Portfolio Value
+        </label>
+      </div>
       <div className="h-64 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -86,32 +148,47 @@ const PortfolioChart: React.FC<PortfolioChartProps> = ({
             <YAxis />
             <Tooltip />
             <Legend />
-            <Line
-              type="monotone"
-              dataKey="delta"
-              name="Delta"
-              stroke="#8884d8"
-            />
-            <Line
-              type="monotone"
-              dataKey="gamma"
-              name="Gamma"
-              stroke="#82ca9d"
-            />
-            <Line
-              type="monotone"
-              dataKey="theta"
-              name="Theta"
-              stroke="#ff7300"
-            />
-            <Line type="monotone" dataKey="vega" name="Vega" stroke="#0088FE" />
-            <Line
-              type="monotone"
-              dataKey="value"
-              name="Portfolio Value"
-              stroke="#000"
-              strokeWidth={2}
-            />
+            {visibleLines.delta && (
+              <Line
+                type="monotone"
+                dataKey="delta"
+                name="Delta"
+                stroke="#8884d8"
+              />
+            )}
+            {visibleLines.gamma && (
+              <Line
+                type="monotone"
+                dataKey="gamma"
+                name="Gamma"
+                stroke="#82ca9d"
+              />
+            )}
+            {visibleLines.theta && (
+              <Line
+                type="monotone"
+                dataKey="theta"
+                name="Theta"
+                stroke="#ff7300"
+              />
+            )}
+            {visibleLines.vega && (
+              <Line
+                type="monotone"
+                dataKey="vega"
+                name="Vega"
+                stroke="#0088FE"
+              />
+            )}
+            {visibleLines.value && (
+              <Line
+                type="monotone"
+                dataKey="value"
+                name="Portfolio Value"
+                stroke="#000"
+                strokeWidth={2}
+              />
+            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
