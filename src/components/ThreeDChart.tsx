@@ -3,7 +3,7 @@ import React, { useEffect, useRef } from "react";
 import Plotly from "plotly.js-dist-min";
 import { Surface3DProps } from "../utils/types";
 
-const Surface3D: React.FC<Surface3DProps> = ({
+const ThreeDChart: React.FC<Surface3DProps> = ({
   data,
   xLabel,
   yLabel,
@@ -65,4 +65,4 @@ const Surface3D: React.FC<Surface3DProps> = ({
   );
 };
 
-export default Surface3D;
+export default ThreeDChart;

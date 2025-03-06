@@ -1,17 +1,8 @@
 // OptionGreeksVisualization.tsx
 import React, { useState, useEffect } from "react";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
-import Surface3D from "./components/Surface3D";
-import OptionContract from "./components/OptionContract";
+import TwoDChart from "./components/TwoDChart";
+import ThreeDChart from "./components/ThreeDChart";
+import PortfolioChart from "./components/PortfolioChart";
 import { initWasm } from "./utils/wasm";
 import { jsCalculateGreeks } from "./utils/calculations";
 import {
@@ -541,52 +532,17 @@ const OptionGreeksVisualization: React.FC = () => {
   const renderVisualization = () => {
     if (visualizationMode === "2d") {
       return (
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart
-              data={chartData}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis
-                dataKey="parameter"
-                label={{
-                  value: getAxisLabel(parameter),
-                  position: "insideBottom",
-                  offset: -5,
-                }}
-              />
-              <YAxis
-                label={{
-                  value: greek.charAt(0).toUpperCase() + greek.slice(1),
-                  angle: -90,
-                  position: "insideLeft",
-                }}
-              />
-              <Tooltip
-                formatter={(value: number) => [
-                  formatTooltip(value),
-                  greek.charAt(0).toUpperCase() + greek.slice(1),
-                ]}
-                labelFormatter={(value: number) =>
-                  `${getAxisLabel(parameter)}: ${value.toFixed(2)}`
-                }
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="value"
-                name={greek.charAt(0).toUpperCase() + greek.slice(1)}
-                stroke="#8884d8"
-                activeDot={{ r: 8 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+        <TwoDChart
+          chartData={chartData}
+          parameter={parameter}
+          greek={greek}
+          getAxisLabel={getAxisLabel}
+          formatTooltip={formatTooltip}
+        />
       );
     } else if (visualizationMode === "3d") {
       return (
-        <Surface3D
+        <ThreeDChart
           data={surfaceData}
           xLabel={getAxisLabel(xParameter)}
           yLabel={getAxisLabel(yParameter)}
@@ -595,87 +551,17 @@ const OptionGreeksVisualization: React.FC = () => {
       );
     } else if (visualizationMode === "portfolio") {
       return (
-        <div>
-          <div className="mb-4">
-            <h3
-              className="font-medium mb-2 cursor-pointer"
-              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            >
-              Portfolio Composition {isDropdownOpen ? "↑" : "↓"}
-            </h3>
-            {isDropdownOpen && (
-              <>
-                {options.map((option, index) => (
-                  <OptionContract
-                    key={index}
-                    option={option}
-                    index={index}
-                    updateOption={updateOption}
-                    removeOption={removeOption}
-                  />
-                ))}
-                <button
-                  onClick={addOption}
-                  className="px-4 py-2 bg-blue-600 text-black rounded hover:bg-blue-700"
-                >
-                  Add Option
-                </button>
-              </>
-            )}
-          </div>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={portfolioData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="parameter"
-                  label={{
-                    value: getAxisLabel(portfolioParam),
-                    position: "insideBottom",
-                    offset: -5,
-                  }}
-                />
-                <YAxis />
-                <Tooltip />
-                <Legend />
-                <Line
-                  type="monotone"
-                  dataKey="delta"
-                  name="Delta"
-                  stroke="#8884d8"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="gamma"
-                  name="Gamma"
-                  stroke="#82ca9d"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="theta"
-                  name="Theta"
-                  stroke="#ff7300"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="vega"
-                  name="Vega"
-                  stroke="#0088FE"
-                />
-                <Line
-                  type="monotone"
-                  dataKey="value"
-                  name="Portfolio Value"
-                  stroke="#000"
-                  strokeWidth={2}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+        <PortfolioChart
+          options={options}
+          portfolioData={portfolioData}
+          portfolioParam={portfolioParam}
+          isDropdownOpen={isDropdownOpen}
+          setIsDropdownOpen={setIsDropdownOpen}
+          updateOption={updateOption}
+          removeOption={removeOption}
+          addOption={addOption}
+          getAxisLabel={getAxisLabel}
+        />
       );
     }
   };
